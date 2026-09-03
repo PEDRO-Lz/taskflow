@@ -9,7 +9,7 @@ export class DevToolsController {
   @Get('board-wire')
   boardWire(@Res() res: Response) {
     const html = readFileSync(
-      join(__dirname, '..', 'test', 'board-wire.html'),
+      join(__dirname, '..', 'tools', 'board-wire.html'),
       'utf-8',
     )
     res.type('html').send(html)
