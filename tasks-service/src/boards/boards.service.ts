@@ -5,12 +5,14 @@ import { Board } from './board.entity'
 import { Card, CardStatus } from './card.entity'
 import { CreateBoardDto } from './dto/create-board.dto'
 import { AddCardDto } from './dto/add-card.dto'
+import { BoardGateway } from './board.gateway'
 
 @Injectable()
 export class BoardsService {
   constructor(
     @InjectRepository(Board) private readonly boards: EntityRepository<Board>,
     @InjectRepository(Card) private readonly cards: EntityRepository<Card>,
+    private readonly gateway: BoardGateway,
   ) {}
 
   async createBoard(dto: CreateBoardDto) {
@@ -23,6 +25,14 @@ export class BoardsService {
     const board = await this.getBoardOrFail(boardId)
     const card = this.cards.create({ title: dto.title, board })
     await this.cards.getEntityManager().flush()
+
+    // Card atualiza
+    this.gateway.emitCardCreated(boardId, {
+      id: card.id,
+      title: card.title,
+      status: card.status,
+    })
+
     return card
   }
 
@@ -36,6 +46,9 @@ export class BoardsService {
 
     card.status = status
     await this.cards.getEntityManager().flush()
+
+    this.gateway.emitCardMoved(boardId, cardId, status)
+
     return card
   }
 

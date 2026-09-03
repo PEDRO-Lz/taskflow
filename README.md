@@ -4,6 +4,8 @@
 docker-compose up --build
 ```
 
+**http://localhost:3002/board-wire**
+
 ##
 
 Comunicação assíncrona entre os serviços e notificação em tempo real pro client
@@ -34,3 +36,13 @@ o EntityManager global nesse cenário por padrão
 
 Antes: registrar um usuário só criava o usuário e tasks-service não sabia que ele existia
 Agora: registro publica evento → tasks-service consome → board padrão criado sozinho, sem chamada HTTP
+
+
+boardGateway (WebSocket, namespace /boards): sala por board (board:<id>), emite cardCreated cardMoved
+
+boardsService chama ele depois de cada mutação
+
+DevToolsController: rota GET /board-wire, serve uma página de teste (test/board-wire.html) que conecta no gateway e mostra os eventos
+
+Antes: criar/mover card só respondia pro cliente que fez a request
+Agora: qualquer cliente com o board aberto via WebSocket recebe o update sem refresh
