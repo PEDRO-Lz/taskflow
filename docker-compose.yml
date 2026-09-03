@@ -5,12 +5,14 @@ services:
       POSTGRES_USER: taskflow
       POSTGRES_PASSWORD: taskflow
       POSTGRES_DB: taskflow_auth
+      POSTGRES_MULTIPLE_DATABASES: taskflow_tasks
     ports:
       - "5432:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
+      - ./infra/postgres-init-multiple-databases.sh:/docker-entrypoint-initdb.d/postgres-init-multiple-databases.sh
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U taskflow -d taskflow_auth"]
+      test: ["CMD-SHELL", "pg_isready -U taskflow -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
