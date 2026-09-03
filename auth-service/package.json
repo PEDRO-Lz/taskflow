@@ -11,6 +11,7 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
+    "@aws-sdk/client-sns": "^3.1126.0",
     "@mikro-orm/core": "^7.1.14",
     "@mikro-orm/nestjs": "^7.1.0",
     "@mikro-orm/postgresql": "^7.1.14",

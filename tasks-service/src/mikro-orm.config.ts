@@ -10,4 +10,5 @@ export default defineConfig({
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
   debug: false,
+  allowGlobalContext: true,
 })

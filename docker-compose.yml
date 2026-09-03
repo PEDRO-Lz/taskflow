@@ -17,6 +17,16 @@ services:
       timeout: 5s
       retries: 5
 
+  # Simula SQS e SNS localmente
+  localstack:
+    build:
+      context: ./infra
+      dockerfile: localstack.Dockerfile
+    environment:
+      SERVICES: sqs,sns
+    ports:
+      - "4566:4566"
+
   auth-service:
     build: ./auth-service
     ports:
@@ -28,9 +38,16 @@ services:
       DB_PASS: taskflow
       DB_NAME: taskflow_auth
       JWT_SECRET: secret
+      AWS_ENDPOINT: http://localstack:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SNS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:user-events
     depends_on:
       postgres:
         condition: service_healthy
+      localstack:
+        condition: service_started
 
   tasks-service:
     build: ./tasks-service
@@ -43,9 +60,16 @@ services:
       DB_PASS: taskflow
       DB_NAME: taskflow_tasks
       JWT_SECRET: secret
+      AWS_ENDPOINT: http://localstack:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/user-events-tasks-queue
     depends_on:
       postgres:
         condition: service_healthy
+      localstack:
+        condition: service_started
 
 volumes:
   pg-data:
