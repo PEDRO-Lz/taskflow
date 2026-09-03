@@ -4,6 +4,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs'
 import mikroOrmConfig from './mikro-orm.config'
 import { BoardsModule } from './boards/boards.module'
 import { AuthModule } from './auth/auth.module'
+import { DevToolsController } from './dev-tools.controller'
 
 @Module({
   imports: [
@@ -12,5 +13,6 @@ import { AuthModule } from './auth/auth.module'
     AuthModule,
     BoardsModule,
   ],
+  controllers: [DevToolsController],
 })
 export class AppModule {}

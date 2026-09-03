@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Board Wire</title>
+</head>
+<body>
+
+<h1>Board Wire</h1>
+
+<p>
+  Endpoint: <input id="wsUrl" value="http://localhost:3002/boards" size="35">
+  Board ID: <input id="boardId" size="40">
+  <button id="joinBtn">Conectar</button>
+  <button id="leaveBtn" disabled>Sair</button>
+</p>
+
+<p>
+  Status: <b id="status" style="color: red">desconectado</b>
+</p>
+
+<h2>Eventos</h2>
+<ul id="log"></ul>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  var statusEl = document.getElementById('status')
+  var logEl = document.getElementById('log')
+  var joinBtn = document.getElementById('joinBtn')
+  var leaveBtn = document.getElementById('leaveBtn')
+  var socket = null
+
+  function setStatus(text, color) {
+    statusEl.textContent = text
+    statusEl.style.color = color
+  }
+
+  function addLog(text) {
+    var li = document.createElement('li')
+    li.textContent = new Date().toLocaleTimeString() + ' - ' + text
+    logEl.prepend(li)
+  }
+
+  joinBtn.onclick = function () {
+    var url = document.getElementById('wsUrl').value
+    var boardId = document.getElementById('boardId').value
+    if (!url || !boardId) return
+
+    socket = io(url, { transports: ['websocket'] })
+
+    socket.on('connect', function () {
+      socket.emit('joinBoard', boardId)
+      setStatus('conectado', 'green')
+      joinBtn.disabled = true
+      leaveBtn.disabled = false
+    })
+
+    socket.on('cardCreated', function (card) {
+      addLog('cardCreated: ' + JSON.stringify(card))
+    })
+
+    socket.on('cardMoved', function (data) {
+      addLog('cardMoved: ' + JSON.stringify(data))
+    })
+
+    socket.on('connect_error', function (err) {
+      setStatus('erro: ' + err.message, 'red')
+    })
+
+    socket.on('disconnect', function () {
+      setStatus('desconectado', 'red')
+      joinBtn.disabled = false
+      leaveBtn.disabled = true
+    })
+  }
+
+  leaveBtn.onclick = function () {
+    if (socket) socket.disconnect()
+  }
+</script>
+
+</body>
+</html>
