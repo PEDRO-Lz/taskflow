@@ -17,5 +17,35 @@ services:
       timeout: 5s
       retries: 5
 
+  auth-service:
+    build: ./auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: taskflow
+      DB_PASS: taskflow
+      DB_NAME: taskflow_auth
+      JWT_SECRET: secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tasks-service:
+    build: ./tasks-service
+    ports:
+      - "3002:3002"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: taskflow
+      DB_PASS: taskflow
+      DB_NAME: taskflow_tasks
+      JWT_SECRET: secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pg-data:
