@@ -5,8 +5,8 @@ docker-compose up --build
 
 ### Para rodar os services no host
 ```bash
-# infra
-docker-compose up -d postgres localstack
+# infra (postgres + localstack + terraform)
+docker-compose up -d postgres localstack terraform
 
 # cada serviço em um terminal
 cd auth-service && npm run start:dev
@@ -23,7 +23,7 @@ cd tasks-service && npm run test:e2e
 
 Comunicação assíncrona entre os serviços e notificação em tempo real pro client
 
-infra/localstack.Dockerfile + localstack-init.sh: LocalStack simulando SNS/SQS 
+infra/terraform: LocalStack simulando SNS/SQS 
 cria o tópico "user-events", a fila "user-events-tasks-queue" e a assinatura entre os dois
 
 ?? Empacotar o script dentro da imagem (em vez de bind mount) garante permissão de execução ??
@@ -87,3 +87,39 @@ o Jest nunca terminaria de rodar.
 O mesmo arquivo assina um JWT de teste (jwt.sign(..., process.env.JWT_SECRET))
 em vez de logar de verdade no auth-service. O tasks-service só valida token,
 não emite, deixa os testes dele independentes.
+
+## Terraform
+
+infra/terraform/ substitui o antigo script localstack-init.sh — os mesmos
+recursos (tópico SNS, fila SQS, assinatura entre os dois) agora nascem
+declarados em HCL em vez de comando awslocal. O provider aws aponta
+pro LocalStack com a mesma credencial (access_key/secret_key)
+que os serviços já usam, e os skip_* desligam a validação de conta AWS
+provider tentaria fazer por padrão.
+
+Rodar sozinho é automático agora: tem um serviço "terraform" no próprio
+docker-compose.yml (imagem hashicorp/terraform), que roda init+apply e sai
+— auth-service/tasks-service só sobem depois dele terminar com sucesso
+(depends_on: condition: service_completed_successfully). Um docker-compose
+up --build já faz tudo sozinho, sem passo manual nenhum.
+
+O endpoint do LocalStack muda dependendo de onde o Terraform roda — dentro
+do compose ele fala com o container "localstack" pelo nome (rede interna do
+docker), no host fala com localhost. Isso é a variável
+localstack_endpoint em variables.tf, passada via TF_VAR_localstack_endpoint
+no compose. Mesmo padrão que os serviços Node já usam pro AWS_ENDPOINT.
+
+Pra rodar/iterar na mão, sem o compose (útil enquanto edita o .tf):
+
+cd infra/terraform
+terraform init    # baixa o provider aws, só na primeira vez
+terraform plan    # mostra o que vai mudar, sem aplicar nada
+terraform apply   # cria de verdade — usa localhost:4566 por padrão
+
+o script antigo não tinha aws_sqs_queue_policy. Sem
+ela, numa AWS de verdade o SNS não teria permissão de publicar na fila (só
+a subscription não basta).
+
+o apply demora uns 50s na primeira vez (aws_sqs_queue e aws_sqs_queue_policy,
+uns 25s cada) não é o LocalStack. é o próprio provider do Terraform que fica confirmando
+de 5 em 5s antes de considerar criado.
