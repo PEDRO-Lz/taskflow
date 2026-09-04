@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-service-config
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USER: taskflow
+  DB_NAME: taskflow_auth
+  AWS_ENDPOINT: http://localstack:4566
+  AWS_REGION: us-east-1
+  SNS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:user-events
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auth-service-secret
+stringData:
+  DB_PASS: taskflow
+  JWT_SECRET: secret
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
