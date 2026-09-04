@@ -123,3 +123,34 @@ a subscription não basta).
 o apply demora uns 50s na primeira vez (aws_sqs_queue e aws_sqs_queue_policy,
 uns 25s cada) não é o LocalStack. é o próprio provider do Terraform que fica confirmando
 de 5 em 5s antes de considerar criado.
+
+## Kubernetes
+
+infra/k8s/: a mesma stack do docker-compose, só que orquestrada por um
+cluster local (kind) em vez do compose
+
+postgres (compose) -> StatefulSet + PersistentVolumeClaim (precisa sempre
+voltar pro mesmo disco, diferente de auth/tasks-service que não guardam
+estado nenhum)
+localstack, auth-service, tasks-service (compose) -> Deployment + Service
+terraform (serviço do compose, roda e sai) -> Job, com um initContainer
+esperando o localstack responder (Job não tem depends_on nativo)
+environment: (compose) -> ConfigMap (o que não é segredo) + Secret (senha,
+JWT_SECRET, credenciais AWS)
+
+rodar:
+
+kind create cluster --name taskflow
+kind load docker-image taskflow-auth-service:latest taskflow-tasks-service:latest --name taskflow
+kubectl apply -f infra/k8s/
+
+as imagens precisam existir localmente antes (docker-compose build, ou
+docker build direto). O kind não puxa do docker-compose sozinho, só
+carrega o que já foi buildado.
+
+pra testar (Service sozinho só é alcançável de dentro do cluster):
+
+kubectl port-forward svc/auth-service 3001:3001
+kubectl port-forward svc/tasks-service 3002:3002
+
+terraform-configmap.yaml é gerado a partir dos .tf (kubectl create configmap --from-file)

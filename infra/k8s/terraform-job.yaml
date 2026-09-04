@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: terraform-apply
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-localstack
+          image: curlimages/curl:8.10.1
+          command:
+            - sh
+            - -c
+            - until curl -sf http://localstack:4566/_localstack/health; do sleep 2; done
+      containers:
+        - name: terraform
+          image: hashicorp/terraform:1.13
+          workingDir: /workspace
+          command:
+            - sh
+            - -c
+            - cp /tf-src/*.tf /workspace/ && terraform init && terraform apply -auto-approve
+          env:
+            - name: TF_VAR_localstack_endpoint
+              value: http://localstack:4566
+          volumeMounts:
+            - name: tf-src
+              mountPath: /tf-src
+              readOnly: true
+            - name: workspace
+              mountPath: /workspace
+      volumes:
+        - name: tf-src
+          configMap:
+            name: terraform-config
+        - name: workspace
+          emptyDir: {}

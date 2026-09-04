@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tasks-service-config
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USER: taskflow
+  DB_NAME: taskflow_tasks
+  AWS_ENDPOINT: http://localstack:4566
+  AWS_REGION: us-east-1
+  SQS_QUEUE_URL: http://localstack:4566/000000000000/user-events-tasks-queue
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tasks-service-secret
+stringData:
+  DB_PASS: taskflow
+  JWT_SECRET: secret
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
