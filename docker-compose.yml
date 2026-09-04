@@ -17,15 +17,37 @@ services:
       timeout: 5s
       retries: 5
 
-  # Simula SQS e SNS localmente
+  # Simula SQS e SNS localmente. Sobe vazio
+  # Quem cria o tópico/fila/assinatura é o serviço terraform
   localstack:
-    build:
-      context: ./infra
-      dockerfile: localstack.Dockerfile
+    image: localstack/localstack:3
     environment:
       SERVICES: sqs,sns
     ports:
       - "4566:4566"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  # Cria os recursos AWS simulados via Terraform services só sobem depois
+  # dele. para o tópico SNS e a fila SQS já existirem
+  # quando os dois começam a publicar/consumir.
+  terraform:
+    image: hashicorp/terraform:1.13
+    working_dir: /workspace
+    volumes:
+      - ./infra/terraform:/workspace
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["terraform init && terraform apply -auto-approve"]
+    environment:
+      # Rodando dentro do compose, o LocalStack é outro container
+      # Fora do compose (no host), a variável usa
+      # o valor padrão dela (localhost:4566).
+      TF_VAR_localstack_endpoint: http://localstack:4566
+    depends_on:
+      localstack:
+        condition: service_healthy
 
   auth-service:
     build: ./auth-service
@@ -46,8 +68,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      localstack:
-        condition: service_started
+      terraform:
+        condition: service_completed_successfully
 
   tasks-service:
     build: ./tasks-service
@@ -68,8 +90,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      localstack:
-        condition: service_started
+      terraform:
+        condition: service_completed_successfully
 
 volumes:
   pg-data:
