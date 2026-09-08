@@ -35,7 +35,7 @@ cd tasks-service && npm run test:e2e
 
 Página de teste pro WebSocket: **http://localhost:3002/board-wire**
 
-<video src="utils/boardWire.mp4" controls muted></video>
+![board-wire recebendo update de card em tempo real via WebSocket](utils/boardWire.gif)
 
 ## Rotas
 
