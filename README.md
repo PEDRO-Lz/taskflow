@@ -1,45 +1,47 @@
+English · [Português](README.pt-BR.md)
+
 # TaskFlow
 
-Projeto de estudo de microsserviços com NestJS. Dois serviços separados,
-auth-service e tasks-service, cada um com seu próprio banco Postgres (mesma instância).
-Autenticação por JWT compartilhado entre os dois, comunicação assíncrona
-via SNS/SQS (simulados com LocalStack), updates em tempo real por
-WebSocket, infra com Terraform e Kubernetes, e tudo também
-sobe via Docker Compose.
+Microservices study project with NestJS. Two separate services,
+auth-service and tasks-service, each with its own Postgres database (same instance).
+Shared JWT authentication between them, asynchronous communication
+via SNS/SQS (simulated with LocalStack), real-time updates via
+WebSocket, infrastructure with Terraform and Kubernetes, and everything also
+runs via Docker Compose.
 
-<img src="utils/flow.png" alt="arquitetura: client fala com auth-service e tasks-service via HTTP/JWT, cada um com seu banco Postgres; auth-service publica evento no SNS ao registrar, tasks-service consome da fila SQS e cria um board automático; tasks-service notifica o client em tempo real via WebSocket" width="1000" />
+<img src="utils/flow.png" alt="architecture: client talks to auth-service and tasks-service via HTTP/JWT, each with its own Postgres database; auth-service publishes an event to SNS on registration, tasks-service consumes from the SQS queue and creates a default board; tasks-service notifies the client in real time via WebSocket" width="1000" />
 
-### Para a build completa
+### For the full build
 ```bash
 docker-compose up --build
 ```
 
-infra subindo (postgres, localstack, terraform aplicando os recursos) e os dois serviços.
+infra coming up (postgres, localstack, terraform applying the resources) and both services starting.
 
-![terminal: containers do postgres e localstack subindo, terraform inicializando o provider aws](utils/run1.png)
-![terminal: terraform apply completo (4 resources added), outputs do tópico SNS e da fila SQS, auth-service e tasks-service iniciando](utils/run2.png)
+![terminal: postgres and localstack containers starting, terraform initializing the aws provider](utils/run1.png)
+![terminal: terraform apply complete (4 resources added), SNS topic and SQS queue outputs, auth-service and tasks-service starting](utils/run2.png)
 
-### Para rodar os services no host
+### To run the services on the host
 ```bash
 # infra (postgres + localstack + terraform)
 docker-compose up -d postgres localstack terraform
 
-# cada serviço em um terminal
+# each service in its own terminal
 cd auth-service && npm run start:dev
 cd tasks-service && npm run start:dev
 
-# testes e2e
+# e2e tests
 cd auth-service && npm run test:e2e
 cd tasks-service && npm run test:e2e
 ```
 
-Página de teste pro WebSocket: **http://localhost:3002/board-wire**
+WebSocket test page: **http://localhost:3002/board-wire**
 
-![board-wire recebendo update de card em tempo real via WebSocket](utils/boardWire.gif)
+![board-wire receiving a card update in real time via WebSocket](utils/boardWire.gif)
 
-## Rotas
+## Routes
 
-### auth-service — porta 3001, sem autenticação
+### auth-service — port 3001, no authentication
 
 `POST /auth/register`
 
@@ -47,11 +49,11 @@ Página de teste pro WebSocket: **http://localhost:3002/board-wire**
 {
   "name": "string",
   "email": "string",
-  "password": "string, mínimo 8 caracteres"
+  "password": "string, minimum 8 characters"
 }
 ```
 
-Retorna `{ id, email, name }` e dispara o evento `UserRegistered` no SNS.
+Returns `{ id, email, name }` and fires the `UserRegistered` event on SNS.
 
 `POST /auth/login`
 
@@ -62,9 +64,9 @@ Retorna `{ id, email, name }` e dispara o evento `UserRegistered` no SNS.
 }
 ```
 
-Retorna `{ accessToken }`.
+Returns `{ accessToken }`.
 
-### tasks-service — porta 3002, todas exigem `Authorization: Bearer <accessToken>`
+### tasks-service — port 3002, all routes require `Authorization: Bearer <accessToken>`
 
 `POST /boards`
 
@@ -75,7 +77,7 @@ Retorna `{ accessToken }`.
 }
 ```
 
-Retorna o board criado. O próprio board padrão de um usuário novo nasce assim, criado pelo SqsConsumer ao processar o evento de registro.
+Returns the created board. A new user's default board is created exactly this way, by the SqsConsumer processing the registration event.
 
 `POST /boards/:boardId/cards`
 
@@ -85,7 +87,7 @@ Retorna o board criado. O próprio board padrão de um usuário novo nasce assim
 }
 ```
 
-Retorna o card criado (status nasce como `todo`) e emite `cardCreated` no WebSocket.
+Returns the created card (status starts as `todo`) and emits `cardCreated` over WebSocket.
 
 `PATCH /boards/:boardId/cards/:cardId`
 
@@ -95,136 +97,138 @@ Retorna o card criado (status nasce como `todo`) e emite `cardCreated` no WebSoc
 }
 ```
 
-Retorna o card atualizado e emite `cardMoved` no WebSocket.
+Returns the updated card and emits `cardMoved` over WebSocket.
 
 `GET /board-wire`
 
-Sem payload. Serve a página de teste do WebSocket (`tools/board-wire.html`).
+No payload. Serves the WebSocket test page (`tools/board-wire.html`).
 
-## Comunicação assíncrona e tempo real
+## Asynchronous communication and real time
 
-infra/terraform: LocalStack simulando SNS/SQS, cria o tópico
-"user-events", a fila "user-events-tasks-queue" e a assinatura entre os
-dois.
+infra/terraform: LocalStack simulating SNS/SQS, creates the "user-events"
+topic, the "user-events-tasks-queue" queue, and the subscription between the
+two.
 
-O SqsConsumer roda num loop de fundo (polling), fora do ciclo de uma
-request HTTP. O MikroORM por padrão bloqueia o uso do EntityManager
-global fora desse ciclo pra evitar concorrência indevida entre requests
-simultâneas — por isso o allowGlobalContext: true lá no config.
+The SqsConsumer runs in a background loop (polling), outside the lifecycle of
+an HTTP request. MikroORM blocks use of the global EntityManager outside that
+cycle by default, to avoid unwanted concurrency between simultaneous
+requests — that's why allowGlobalContext: true is set in the config.
 
 auth-service
-SnsPublisher (@aws-sdk/client-sns): publica "UserRegistered" depois de um registro bem-sucedido
-AuthService injeta o publisher e chama ele no register()
+SnsPublisher (@aws-sdk/client-sns): publishes "UserRegistered" after a successful registration
+AuthService injects the publisher and calls it inside register()
 
 tasks-service
-SqsConsumer (@aws-sdk/client-sqs): long-polling na fila desde o boot e ao receber "UserRegistered", cria o board padrão pro usuário
+SqsConsumer (@aws-sdk/client-sqs): long-polling the queue since boot, and on receiving "UserRegistered" creates the default board for the user
 
-Antes: registrar um usuário só criava o usuário e tasks-service não sabia que ele existia
-Agora: registro publica evento → tasks-service consome → board padrão criado sozinho, sem chamada HTTP
+Before: registering a user only created the user, tasks-service had no idea it existed
+Now: registration publishes an event → tasks-service consumes it → default board gets created on its own, no HTTP call involved
 
-boardGateway (WebSocket, namespace /boards): sala por board (board:<id>), emite cardCreated cardMoved
-boardsService chama ele depois de cada mutação
+boardGateway (WebSocket, /boards namespace): one room per board (board:<id>), emits cardCreated and cardMoved
+boardsService calls it after every mutation
 
-DevToolsController: rota GET /board-wire, serve uma página de teste (tools/board-wire.html) que conecta no gateway e mostra os eventos
+DevToolsController: GET /board-wire route, serves a test page (tools/board-wire.html) that connects to the gateway and shows the events live
 
-Antes: criar/mover card só respondia pro cliente que fez a request
-Agora: qualquer cliente com o board aberto via WebSocket recebe o update sem refresh
+Before: creating/moving a card only responded to the client that made the request
+Now: any client with that board open over WebSocket gets the update with no refresh
 
-## Testes
+## Tests
 
-e2e em test/*.e2e-spec.ts nos dois serviços. sem banco de teste isolado e-mails de teste usam timestamp.
+e2e tests in test/*.e2e-spec.ts in both services. No isolated test database, test emails use a timestamp.
 
-describe/it/beforeAll/afterAll/expect são globais injetadas pelo Jest em
-runtime, não vêm de import nenhum. por isso o tsconfig.spec.json precisa
-de "types": ["jest", "node"] explícito (o TS 6 parou de auto-incluir
-@types/* sozinho).
+describe/it/beforeAll/afterAll/expect are globals injected by Jest at
+runtime, they don't come from any import. That's why tsconfig.spec.json
+needs an explicit "types": ["jest", "node"] (TS 6 stopped auto-including
+@types/* on its own).
 
-tsconfig.spec.json existe separado do tsconfig.json principal porque esse
-último ganhou "exclude": ["test"] (senão o nest build da aplicação tentava
-compilar os specs junto). O spec config libera rootDir e inclui test/ de
-volta, só pra ele.
+tsconfig.spec.json exists separately from the main tsconfig.json because the
+latter got "exclude": ["test"] added (otherwise the app's nest build would
+try to compile the specs too). The spec config frees up rootDir and brings
+test/ back in, just for itself.
 
-Jest roda em modo ESM (NODE_OPTIONS=--experimental-vm-modules,
-useESM: true) — o @nestjs/common@12 e afins agora são ESM puro ("type":
-"module", sem build CJS), e o Jest no modo padrão não consegue dar
-require() nisso.
+Jest runs in ESM mode (NODE_OPTIONS=--experimental-vm-modules,
+useESM: true) — @nestjs/common@12 and friends are now pure ESM ("type":
+"module", no CJS build), and Jest in default mode can't require() that.
 
-tasks-service/test/boards.e2e-spec.ts troca o SqsConsumer de verdade por um
-stub (overrideProvider(SqsConsumer).useValue({ onModuleInit: () => {} })) —
-o real entra num loop infinito de polling assim que a app sobe, e sem isso
-o Jest nunca terminaria de rodar.
+tasks-service/test/boards.e2e-spec.ts swaps the real SqsConsumer for a stub
+(overrideProvider(SqsConsumer).useValue({ onModuleInit: () => {} })) — the
+real one enters an infinite polling loop as soon as the app boots, and
+without this Jest would never finish running.
 
-O mesmo arquivo assina um JWT de teste (jwt.sign(..., process.env.JWT_SECRET))
-em vez de logar de verdade no auth-service. O tasks-service só valida token,
-não emite, deixa os testes dele independentes.
+The same file signs a test JWT (jwt.sign(..., process.env.JWT_SECRET))
+instead of actually logging in through auth-service. tasks-service only
+validates tokens, it doesn't issue them, which keeps its tests independent.
 
 ## Terraform
 
-infra/terraform/ substitui o antigo script localstack-init.sh — os mesmos
-recursos (tópico SNS, fila SQS, assinatura entre os dois) agora nascem
-declarados em HCL em vez de comando awslocal. O provider aws aponta
-pro LocalStack com a mesma credencial (access_key/secret_key)
-que os serviços já usam, e os skip_* desligam a validação de conta AWS
-provider tentaria fazer por padrão.
+infra/terraform/ replaces the old localstack-init.sh script — the same
+resources (SNS topic, SQS queue, subscription between them) are now declared
+in HCL instead of awslocal commands. The aws provider points at LocalStack
+with the same credentials (access_key/secret_key) the services already use,
+and the skip_* flags turn off the AWS account validation the provider would
+try to do by default.
 
-Rodar sozinho é automático agora: tem um serviço "terraform" no próprio
-docker-compose.yml (imagem hashicorp/terraform), que roda init+apply e sai
-— auth-service/tasks-service só sobem depois dele terminar com sucesso
-(depends_on: condition: service_completed_successfully). Um docker-compose
-up --build já faz tudo sozinho, sem passo manual nenhum.
+Running it on its own is automatic now: there's a "terraform" service right
+in docker-compose.yml (hashicorp/terraform image) that runs init+apply and
+exits — auth-service/tasks-service only start after it finishes successfully
+(depends_on: condition: service_completed_successfully). A single
+docker-compose up --build already does everything on its own, no manual step
+needed.
 
-O endpoint do LocalStack muda dependendo de onde o Terraform roda — dentro
-do compose ele fala com o container "localstack" pelo nome (rede interna do
-docker), no host fala com localhost. Isso é a variável
-localstack_endpoint em variables.tf, passada via TF_VAR_localstack_endpoint
-no compose. Mesmo padrão que os serviços Node já usam pro AWS_ENDPOINT.
+The LocalStack endpoint changes depending on where Terraform runs — inside
+compose it talks to the "localstack" container by name (Docker's internal
+network), on the host it talks to localhost. That's the
+localstack_endpoint variable in variables.tf, passed via
+TF_VAR_localstack_endpoint in compose. Same pattern the Node services already
+use for AWS_ENDPOINT.
 
-Pra rodar/iterar na mão, sem o compose (útil enquanto edita o .tf):
+To run/iterate by hand, without compose (useful while editing the .tf):
 
 cd infra/terraform
-terraform init    # baixa o provider aws, só na primeira vez
-terraform plan    # mostra o que vai mudar, sem aplicar nada
-terraform apply   # cria de verdade — usa localhost:4566 por padrão
+terraform init    # downloads the aws provider, only needed the first time
+terraform plan    # shows what would change, without applying anything
+terraform apply   # actually creates it — uses localhost:4566 by default
 
-o script antigo não tinha aws_sqs_queue_policy. Sem
-ela, numa AWS de verdade o SNS não teria permissão de publicar na fila (só
-a subscription não basta).
+The old script didn't have aws_sqs_queue_policy. Without it, on a real AWS
+account SNS wouldn't have permission to publish to the queue (the
+subscription alone isn't enough).
 
-o apply demora uns 50s na primeira vez (aws_sqs_queue e aws_sqs_queue_policy,
-uns 25s cada) não é o LocalStack. é o próprio provider do Terraform que fica confirmando
-de 5 em 5s antes de considerar criado.
+The apply takes about 50s the first time (aws_sqs_queue and
+aws_sqs_queue_policy, about 25s each) — that's not LocalStack. It's
+Terraform's own provider polling every 5s before it considers the resource
+created.
 
 ## Kubernetes
 
-infra/k8s/: a mesma stack do docker-compose, só que orquestrada por um
-cluster local (kind) em vez do compose
+infra/k8s/: the same stack as docker-compose, just orchestrated by a local
+cluster (kind) instead of compose
 
-postgres (compose) -> StatefulSet + PersistentVolumeClaim (precisa sempre
-voltar pro mesmo disco, diferente de auth/tasks-service que não guardam
-estado nenhum)
+postgres (compose) -> StatefulSet + PersistentVolumeClaim (it always needs
+to come back to the same disk, unlike auth/tasks-service which hold no
+state at all)
 localstack, auth-service, tasks-service (compose) -> Deployment + Service
-terraform (serviço do compose, roda e sai) -> Job, com um initContainer
-esperando o localstack responder (Job não tem depends_on nativo)
-environment: (compose) -> ConfigMap (o que não é segredo) + Secret (senha,
-JWT_SECRET, credenciais AWS)
+terraform (the one-shot compose service) -> Job, with an initContainer
+waiting for localstack to respond (Jobs have no native depends_on)
+environment: (compose) -> ConfigMap (whatever isn't a secret) + Secret
+(password, JWT_SECRET, AWS credentials)
 
-rodar:
+to run:
 
 kind create cluster --name taskflow
 kind load docker-image taskflow-auth-service:latest taskflow-tasks-service:latest --name taskflow
 kubectl apply -f infra/k8s/
 
-as imagens precisam existir localmente antes (docker-compose build, ou
-docker build direto). O kind não puxa do docker-compose sozinho, só
-carrega o que já foi buildado.
+the images need to already exist locally beforehand (docker-compose build,
+or a direct docker build). kind doesn't pull from docker-compose on its
+own, it only loads whatever's already been built.
 
-pra testar (Service sozinho só é alcançável de dentro do cluster):
+to test it (a Service alone is only reachable from inside the cluster):
 
 kubectl port-forward svc/auth-service 3001:3001
 kubectl port-forward svc/tasks-service 3002:3002
 
-terraform-configmap.yaml é gerado a partir dos .tf (kubectl create configmap --from-file)
+terraform-configmap.yaml is generated from the .tf files (kubectl create configmap --from-file)
 
-escalar horizontalmente é só um comando, sem mexer em código nem rebuild:
+scaling horizontally is just one command, no code changes or rebuild needed:
 
 kubectl scale deployment tasks-service --replicas=5
