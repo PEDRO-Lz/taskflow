@@ -15,7 +15,7 @@ spec:
       initContainers:
         - name: wait-postgres
           image: postgres:16-alpine
-          command: ["sh", "-c", "until pg_isready -h postgres -U taskflow; do sleep 2; done"]
+          command: ["sh", "-c", "until pg_isready -h postgres-auth -U taskflow; do sleep 2; done"]
       containers:
         - name: auth-service
           image: taskflow-auth-service:latest

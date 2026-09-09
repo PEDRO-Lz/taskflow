@@ -3,7 +3,7 @@
 # TaskFlow
 
 Projeto de estudo de microsserviços com NestJS. Dois serviços separados,
-auth-service e tasks-service, cada um com seu próprio banco Postgres (mesma instância).
+auth-service e tasks-service, cada um com sua própria instância Postgres.
 Autenticação por JWT compartilhado entre os dois, comunicação assíncrona
 via SNS/SQS (simulados com LocalStack), updates em tempo real por
 WebSocket, infra com Terraform e Kubernetes, e tudo também
@@ -24,7 +24,7 @@ infra subindo (postgres, localstack, terraform aplicando os recursos) e os dois 
 ### Para rodar os services no host
 ```bash
 # infra (postgres + localstack + terraform)
-docker-compose up -d postgres localstack terraform
+docker-compose up -d postgres-auth postgres-tasks localstack terraform
 
 # cada serviço em um terminal
 cd auth-service && npm run start:dev
@@ -201,9 +201,9 @@ de 5 em 5s antes de considerar criado.
 infra/k8s/: a mesma stack do docker-compose, só que orquestrada por um
 cluster local (kind) em vez do compose
 
-postgres (compose) -> StatefulSet + PersistentVolumeClaim (precisa sempre
-voltar pro mesmo disco, diferente de auth/tasks-service que não guardam
-estado nenhum)
+postgres-auth, postgres-tasks (compose) -> um StatefulSet + PersistentVolumeClaim
+cada, instâncias totalmente separadas (precisam sempre voltar pro mesmo
+disco, diferente de auth/tasks-service que não guardam estado nenhum)
 localstack, auth-service, tasks-service (compose) -> Deployment + Service
 terraform (serviço do compose, roda e sai) -> Job, com um initContainer
 esperando o localstack responder (Job não tem depends_on nativo)

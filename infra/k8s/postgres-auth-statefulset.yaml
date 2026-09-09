@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgres
+  name: postgres-auth
 spec:
-  serviceName: postgres
+  serviceName: postgres-auth
   replicas: 1
   selector:
     matchLabels:
-      app: postgres
+      app: postgres-auth
   template:
     metadata:
       labels:
-        app: postgres
+        app: postgres-auth
     spec:
       containers:
         - name: postgres
@@ -25,23 +25,14 @@ spec:
               value: taskflow
             - name: POSTGRES_DB
               value: taskflow_auth
-            - name: POSTGRES_MULTIPLE_DATABASES
-              value: taskflow_tasks
           volumeMounts:
             - name: pg-data
               mountPath: /var/lib/postgresql/data
-            - name: init-script
-              mountPath: /docker-entrypoint-initdb.d
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "taskflow", "-d", "postgres"]
             initialDelaySeconds: 5
             periodSeconds: 5
-      volumes:
-        - name: init-script
-          configMap:
-            name: postgres-init
-            defaultMode: 0755
   volumeClaimTemplates:
     - metadata:
         name: pg-data
