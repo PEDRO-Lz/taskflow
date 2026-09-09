@@ -16,6 +16,9 @@ spec:
         - name: wait-postgres
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres-tasks -U taskflow; do sleep 2; done"]
+        - name: wait-redis
+          image: redis:7-alpine
+          command: ["sh", "-c", "until redis-cli -h redis ping; do sleep 2; done"]
       containers:
         - name: tasks-service
           image: taskflow-tasks-service:latest

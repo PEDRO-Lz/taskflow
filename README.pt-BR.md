@@ -11,11 +11,9 @@ sobe via Docker Compose.
 
 <img src="utils/flow.png" alt="arquitetura: client fala com auth-service e tasks-service via HTTP/JWT, cada um com seu banco Postgres; auth-service publica evento no SNS ao registrar, tasks-service consome da fila SQS e cria um board automático; tasks-service notifica o client em tempo real via WebSocket" width="600" />
 
-No Kubernetes, auth-service e tasks-service sobem com 3 réplicas por padrão.
+## Três formas independentes de rodar o projeto
 
-![terminal: kubectl mostrando os deployments auth-service e tasks-service em 3/3 prontos, três pods rodando de cada serviço, e três endpoints de backend atrás de cada Service](utils/replicas.png)
-
-### Para a build completa
+### 1 - Para a build completa
 ```bash
 docker-compose up --build
 ```
@@ -25,19 +23,51 @@ infra subindo (postgres, localstack, terraform aplicando os recursos) e os dois 
 ![terminal: containers do postgres e localstack subindo, terraform inicializando o provider aws](utils/run1.png)
 ![terminal: terraform apply completo (4 resources added), outputs do tópico SNS e da fila SQS, auth-service e tasks-service iniciando](utils/run2.png)
 
-### Para rodar os services no host
+### 2 - Para rodar os services no host
 ```bash
 # infra (postgres + localstack + terraform)
 docker-compose up -d postgres-auth postgres-tasks localstack terraform
 
-# cada serviço em um terminal
+# para rodar cada serviço em um terminal
 cd auth-service && npm run start:dev
 cd tasks-service && npm run start:dev
 
-# testes e2e
+# para rodar os testes e2e
 cd auth-service && npm run test:e2e
 cd tasks-service && npm run test:e2e
 ```
+
+### 3 - No Kubernetes, via kind
+```bash
+kind create cluster --name taskflow
+kind load docker-image taskflow-auth-service:latest taskflow-tasks-service:latest --name taskflow
+kubectl apply -f infra/k8s/
+```
+
+a mesma stack das duas opções acima, só que orquestrada por um cluster
+local em vez do compose. auth-service e tasks-service sobem com 3
+réplicas cada por padrão, o setup completo (incluindo o reset-to-k8s.sh,
+pra resetar o ambiente de volta pra só o cluster) está na seção
+Kubernetes mais adiante.
+
+![terminal: kubectl mostrando os deployments auth-service e tasks-service em 3/3 prontos, três pods rodando de cada serviço, e três endpoints de backend atrás de cada Service](utils/replicas.png)
+
+com ele de pé, as mesmas rotas ficam alcançáveis via kubectl
+port-forward e testáveis no Postman (ou qualquer cliente REST) igual as
+outras duas opções, só que apontando pra localhost em vez de um endereço
+interno do cluster:
+
+```
+kubectl port-forward svc/auth-service 3001:3001
+kubectl port-forward svc/tasks-service 3002:3002
+```
+
+então, no Postman: POST http://localhost:3001/auth/register, POST
+http://localhost:3001/auth/login (pega o accessToken da resposta), e usa
+ele no header Authorization contra
+http://localhost:3002/boards/:boardId/cards. o tasks-service cria o
+board padrão sozinho em um ou dois segundos depois do registro, sem
+precisar criar um manualmente antes.
 
 Página de teste pro WebSocket: **http://localhost:3002/board-wire**
 
@@ -136,6 +166,15 @@ DevToolsController: rota GET /board-wire, serve uma página de teste (tools/boar
 Antes: criar/mover card só respondia pro cliente que fez a request
 Agora: qualquer cliente com o board aberto via WebSocket recebe o update sem refresh
 
+RedisIoAdapter (src/redis-io.adapter.ts): com o tasks-service rodando como
+várias réplicas no Kubernetes, o servidor socket.io de cada pod só conhece
+os clients conectados nele mesmo. Um server.to(...).emit(...) sozinho nunca
+chegaria num client que está em outro pod. O adapter faz cada pod publicar
+os emits num canal de pub/sub do Redis em vez de só emitir localmente, e
+todos os pods assinam esse mesmo canal — então um card movido pelo pod que
+atendeu a request continua chegando nos clients conectados em qualquer
+outro. Plugado no main.ts via app.useWebSocketAdapter(...).
+
 ## Testes
 
 e2e em test/*.e2e-spec.ts nos dois serviços. sem banco de teste isolado e-mails de teste usam timestamp.
@@ -208,10 +247,12 @@ cluster local (kind) em vez do compose
 postgres-auth, postgres-tasks (compose) -> um StatefulSet + PersistentVolumeClaim
 cada, instâncias totalmente separadas (precisam sempre voltar pro mesmo
 disco, diferente de auth/tasks-service que não guardam estado nenhum)
-localstack, auth-service, tasks-service (compose) -> Deployment + Service
+localstack, redis, auth-service, tasks-service (compose) -> Deployment +
+Service
 auth-service e tasks-service sobem com 3 réplicas por padrão (sem estado,
-seguro rodar mais de uma); localstack fica em 1, o estado de SQS/SNS só
-existe na memória dessa instância única
+seguro rodar mais de uma); localstack e redis ficam em 1, o estado dos
+dois só existe na memória dessa instância única.
+
 terraform (serviço do compose, roda e sai) -> Job, com um initContainer
 esperando o localstack responder (Job não tem depends_on nativo)
 environment: (compose) -> ConfigMap (o que não é segredo) + Secret (senha,
@@ -227,10 +268,22 @@ as imagens precisam existir localmente antes (docker-compose build, ou
 docker build direto). O kind não puxa do docker-compose sozinho, só
 carrega o que já foi buildado.
 
+reset-to-k8s.sh, na raiz do projeto, faz tudo isso do zero: derruba o
+docker-compose por completo (containers, rede e volumes), rebuilda as
+imagens, apaga e recria o cluster kind, carrega as imagens nele e aplica
+todos os manifests, esperando tudo ficar de pé. Roda ele quando quiser
+resetar o ambiente local até sobrar só o cluster kind, sem nada do
+compose junto.
+
 pra testar (Service sozinho só é alcançável de dentro do cluster):
 
 kubectl port-forward svc/auth-service 3001:3001
 kubectl port-forward svc/tasks-service 3002:3002
+
+os dois comandos prendem o terminal enquanto rodam. Com os dois
+de pé, dá pra usar o Postman (ou qualquer cliente REST) nas mesmas rotas
+listadas acima, só que em localhost:3001 e localhost:3002, igual seria
+na build local.
 
 terraform-configmap.yaml é gerado a partir dos .tf (kubectl create configmap --from-file)
 
@@ -240,6 +293,6 @@ em código nem rebuild:
 kubectl scale deployment tasks-service --replicas=5
 
 o gateway WebSocket do tasks-service guarda as conexões na memória de cada
-pod, sem adapter compartilhado entre réplicas
-Uma atualização de card pode não chegar num cliente conectado a um pod diferente
-do que fez a mudança. Não afeta o auth-service, que não tem estado em memória.
+pod. Uma atualização de card feita numa réplica não chegaria num cliente
+conectado em outra. Isso foi resolvido com um adapter Redis.
+Não afeta o auth-service, que não tem estado em memória.

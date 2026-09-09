@@ -31,6 +31,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Canal de pub/sub pro socket.io do tasks-service conseguir fazer
+  # broadcast entre as réplicas (cada pod só tem os clients que
+  # conectaram nele, sem isso um evento não sai do pod que o gerou)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   # Simula SQS e SNS localmente. Sobe vazio
   # Quem cria o tópico/fila/assinatura é o serviço terraform
   localstack:
@@ -101,11 +114,14 @@ services:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
       SQS_QUEUE_URL: http://localstack:4566/000000000000/user-events-tasks-queue
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres-tasks:
         condition: service_healthy
       terraform:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
 volumes:
   pg-auth-data:
