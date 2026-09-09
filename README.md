@@ -9,7 +9,11 @@ via SNS/SQS (simulated with LocalStack), real-time updates via
 WebSocket, infrastructure with Terraform and Kubernetes, and everything also
 runs via Docker Compose.
 
-<img src="utils/flow.png" alt="architecture: client talks to auth-service and tasks-service via HTTP/JWT, each with its own Postgres database; auth-service publishes an event to SNS on registration, tasks-service consumes from the SQS queue and creates a default board; tasks-service notifies the client in real time via WebSocket" width="1000" />
+<img src="utils/flow.png" alt="architecture: client talks to auth-service and tasks-service via HTTP/JWT, each with its own Postgres database; auth-service publishes an event to SNS on registration, tasks-service consumes from the SQS queue and creates a default board; tasks-service notifies the client in real time via WebSocket" width="600" />
+
+On Kubernetes, auth-service and tasks-service run with 3 replicas by default.
+
+![terminal: kubectl showing auth-service and tasks-service deployments at 3/3 ready, three running pods for each service, and three backend endpoints behind each Service](utils/replicas.png)
 
 ### For the full build
 ```bash
@@ -207,6 +211,9 @@ postgres-auth, postgres-tasks (compose) -> one StatefulSet + PersistentVolumeCla
 each, fully separate instances (they always need to come back to the same
 disk, unlike auth/tasks-service which hold no state at all)
 localstack, auth-service, tasks-service (compose) -> Deployment + Service
+auth-service and tasks-service default to 3 replicas each (stateless, safe
+to run more than one); localstack stays at 1, its SQS/SNS state only lives
+in that single instance's memory
 terraform (the one-shot compose service) -> Job, with an initContainer
 waiting for localstack to respond (Jobs have no native depends_on)
 environment: (compose) -> ConfigMap (whatever isn't a secret) + Secret
@@ -229,6 +236,12 @@ kubectl port-forward svc/tasks-service 3002:3002
 
 terraform-configmap.yaml is generated from the .tf files (kubectl create configmap --from-file)
 
-scaling horizontally is just one command, no code changes or rebuild needed:
+scaling horizontally from that default is just one command, no code changes
+or rebuild needed:
 
 kubectl scale deployment tasks-service --replicas=5
+
+tasks-service's WebSocket gateway keeps its connections in memory per pod,
+with no shared adapter between replicas, so a card update can miss a client
+connected to a different pod than the one that made the change. Not an
+issue for auth-service, which has no in-memory state to begin with.

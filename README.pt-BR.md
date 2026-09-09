@@ -9,7 +9,11 @@ via SNS/SQS (simulados com LocalStack), updates em tempo real por
 WebSocket, infra com Terraform e Kubernetes, e tudo também
 sobe via Docker Compose.
 
-<img src="utils/flow.png" alt="arquitetura: client fala com auth-service e tasks-service via HTTP/JWT, cada um com seu banco Postgres; auth-service publica evento no SNS ao registrar, tasks-service consome da fila SQS e cria um board automático; tasks-service notifica o client em tempo real via WebSocket" width="1000" />
+<img src="utils/flow.png" alt="arquitetura: client fala com auth-service e tasks-service via HTTP/JWT, cada um com seu banco Postgres; auth-service publica evento no SNS ao registrar, tasks-service consome da fila SQS e cria um board automático; tasks-service notifica o client em tempo real via WebSocket" width="600" />
+
+No Kubernetes, auth-service e tasks-service sobem com 3 réplicas por padrão.
+
+![terminal: kubectl mostrando os deployments auth-service e tasks-service em 3/3 prontos, três pods rodando de cada serviço, e três endpoints de backend atrás de cada Service](utils/replicas.png)
 
 ### Para a build completa
 ```bash
@@ -205,6 +209,9 @@ postgres-auth, postgres-tasks (compose) -> um StatefulSet + PersistentVolumeClai
 cada, instâncias totalmente separadas (precisam sempre voltar pro mesmo
 disco, diferente de auth/tasks-service que não guardam estado nenhum)
 localstack, auth-service, tasks-service (compose) -> Deployment + Service
+auth-service e tasks-service sobem com 3 réplicas por padrão (sem estado,
+seguro rodar mais de uma); localstack fica em 1, o estado de SQS/SNS só
+existe na memória dessa instância única
 terraform (serviço do compose, roda e sai) -> Job, com um initContainer
 esperando o localstack responder (Job não tem depends_on nativo)
 environment: (compose) -> ConfigMap (o que não é segredo) + Secret (senha,
@@ -227,6 +234,12 @@ kubectl port-forward svc/tasks-service 3002:3002
 
 terraform-configmap.yaml é gerado a partir dos .tf (kubectl create configmap --from-file)
 
-escalar horizontalmente é só um comando, sem mexer em código nem rebuild:
+escalar horizontalmente a partir desse padrão é só um comando, sem mexer
+em código nem rebuild:
 
 kubectl scale deployment tasks-service --replicas=5
+
+o gateway WebSocket do tasks-service guarda as conexões na memória de cada
+pod, sem adapter compartilhado entre réplicas
+Uma atualização de card pode não chegar num cliente conectado a um pod diferente
+do que fez a mudança. Não afeta o auth-service, que não tem estado em memória.
